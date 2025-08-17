@@ -1,0 +1,443 @@
+---
+title: "census_households"
+output: html_document
+date: "2025-08-16"
+---
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(sf)
+library(kableExtra)
+library(tmap)
+library(tmaptools)
+```
+
+## Accomodation Type
+
+```{r}
+accomtype2021 = read_csv("censusdata/accomtype2021.csv") %>%
+  clean_names() %>%
+  transmute(lsoa_code,across(
+    .cols = where(is.numeric) & !all_of("all_households"),
+    .fns = ~ (.x / all_households) * 100,
+    .names = "{.col}_pct"
+  ))
+
+#2011
+accomtype2011 = read_csv("censusdata/accomtype2011.csv") %>%
+  clean_names() %>%
+  transmute(lsoa_code,across(
+    .cols = where(is.numeric) & !all_of("all_households"),
+    .fns = ~ (.x / all_households) * 100,
+    .names = "{.col}_pct"
+  ))
+```
+
+## Household Composition
+
+```{r}
+#2021
+hholdcomposition2021 = read_csv("censusdata/hholdcomposition2021.csv") %>%
+  clean_names() %>%
+  select(-18) %>%
+  transmute(lsoa_code,
+            across(
+    .cols = where(is.numeric) & !all_of("all_households"),
+    .fns = ~ (.x / all_households) * 100,
+    .names = "{.col}_pct"
+  ))
+
+#2011
+hholdcomposition2011 = read_csv("censusdata/hholdcomposition2011.csv") %>%
+  clean_names() %>%
+  select(-18) %>%
+  transmute(lsoa_code,
+            across(
+    .cols = where(is.numeric) & !all_of("all_households"),
+    .fns = ~ (.x / all_households) * 100,
+    .names = "{.col}_pct"
+  ))
+```
+
+## Tenure
+
+```{r}
+#2021
+tenure2021 = read_csv("censusdata/tenure2021.csv") %>%
+  clean_names() %>%
+  transmute(lsoa_code, all_households,
+            across(
+    .cols = where(is.numeric) & !all_of("all_households"),
+    .fns = ~ (.x / all_households) * 100,
+    .names = "{.col}_pct"
+  ))
+
+#2011
+tenure2011 = read_csv("censusdata/tenure2011.csv") %>%
+  clean_names() %>%
+  transmute(lsoa_code, all_households,
+            across(
+    .cols = where(is.numeric) & !all_of("all_households"),
+    .fns = ~ (.x / all_households) * 100,
+    .names = "{.col}_pct"
+  ))
+```
+
+```{r}
+census2011 <- list(
+  accomtype2011, hholdcomposition2011,
+  tenure2011
+)
+
+
+
+census2021 <- list(
+  accomtype2021, hholdcomposition2021,
+  tenure2021
+)
+```
+
+household count data
+
+```{r}
+hh_2021 <- tenure2021 %>%
+  rename(all_households_2021 = all_households) %>%
+  select(1,2)
+
+hh_2011 <- tenure2011 %>%
+  rename(all_households_2011 = all_households) %>%
+  select(1,2) 
+```
+
+```{r}
+households2011 <- reduce(census2011, full_join, by = "lsoa_code") %>%
+  replace(is.na(.), 0)
+
+households2021 <- reduce(census2021, full_join, by = "lsoa_code")
+```
+
+### Shapefile
+
+```{r}
+shapefiles <- list.files("barking/LB_shp/", pattern = "\\.shp$", full.names = TRUE) 
+
+london2021 <- shapefiles %>%   map(~ st_read(.x, quiet = TRUE) %>% st_transform(27700)) %>%   bind_rows() %>%   rename(lsoa_code = lsoa21cd)
+```
+
+extracting London borough column
+
+```{r}
+
+boroughs <- london2021 %>%  
+  select(c(1,5)) %>%   
+  st_drop_geometry()
+```
+
+List of riverside lsoas
+
+```{r} 
+riverside_list = list("E01034476", "E01034477",  "E01000094", "E01000095", "E01034475","E01034478", "E01000093", "E01000091")
+
+```
+
+## Change dataset
+
+```{r}
+common_cols <- intersect(names(households2011), names(households2021))
+common_cols <- setdiff(common_cols, "lsoa_code")
+
+numeric_cols <- common_cols[
+  sapply(households2011[common_cols], is.numeric) & 
+  sapply(households2021[common_cols], is.numeric)
+]
+
+change_households <- households2011 %>%
+  select(lsoa_code, all_of(numeric_cols)) %>%
+  inner_join(
+    households2021 %>% select(lsoa_code, all_of(numeric_cols)),
+    by = "lsoa_code",
+    suffix = c("_2011", "_2021")
+  ) %>%
+  mutate(across(
+    ends_with("_2021"),
+    .fns = ~ . - get(sub("_2021", "_2011", cur_column())),
+    .names = "{sub('_2021', '', .col)}_change"
+  )) %>%
+  select(lsoa_code, ends_with("_change")) %>%
+  full_join(.,hh_2021,by="lsoa_code") %>%
+  full_join(.,hh_2011,by="lsoa_code") %>% 
+  full_join(.,boroughs,by="lsoa_code")
+```
+
+### London Weighted Change
+
+```{r}
+hh_weighted_avg_2021 <- households2021 %>%
+  full_join(hh_2021, by="lsoa_code") %>%
+  select(where(is.numeric), -matches("code|ID", ignore.case = TRUE)) %>%
+  summarise(across(
+    ends_with("_pct"),
+    ~ weighted.mean(.x, w = all_households_2021, na.rm = TRUE),
+    .names = "{.col}"
+  )) %>%
+  pivot_longer(everything(), names_to = "stat", values_to = "ldn_avg_weighted")
+
+
+hh_weighted_avg_2011 <- households2011 %>%
+  full_join(hh_2011, by="lsoa_code") %>%
+  select(where(is.numeric), -matches("code|ID", ignore.case = TRUE)) %>%
+  summarise(across(
+    ends_with("_pct"),
+    ~ weighted.mean(.x, w = all_households_2011, na.rm = TRUE),
+    .names = "{.col}"
+  )) %>%
+  pivot_longer(everything(), names_to = "stat", values_to = "ldn_avg_weighted")
+```
+
+### Barking Weighted Proportion CHANGE
+
+```{r}
+barking_hh_weighted_avg_2021 <- households2021 %>%
+  full_join(.,boroughs, by="lsoa_code") %>%
+  filter(lad22cd == "E09000002" & !(lsoa_code %in% riverside_list)) %>%
+  full_join(hh_2021, by="lsoa_code") %>%
+  select(where(is.numeric), -matches("code|ID", ignore.case = TRUE)) %>%
+  summarise(across(
+    ends_with("_pct"),
+    ~ weighted.mean(.x, w = all_households_2021, na.rm = TRUE),
+    .names = "{.col}"
+  )) %>%
+  pivot_longer(everything(), names_to = "stat", values_to = "bark_avg_weighted")
+
+
+barking_hh_weighted_avg_2011 <- households2011 %>%
+  full_join(.,boroughs, by="lsoa_code") %>%
+  filter(lad22cd == "E09000002" & !(lsoa_code %in% riverside_list)) %>%
+  full_join(hh_2011, by="lsoa_code") %>%
+  select(where(is.numeric), -matches("code|ID", ignore.case = TRUE)) %>%
+  summarise(across(
+    ends_with("_pct"),
+    ~ weighted.mean(.x, w = all_households_2011, na.rm = TRUE),
+    .names = "{.col}"
+  )) %>%
+  pivot_longer(everything(), names_to = "stat", values_to = "bark_avg_weighted")
+```
+
+
+
+## Riverside
+ 
+```{r}
+riverside2021_hh = households2021 %>%
+  filter(lsoa_code %in% riverside_list) %>%
+  pivot_longer(cols = ends_with("_pct"), 
+    names_to = "stat",
+    values_to = "riverside_pct"
+  ) %>%
+  left_join(.,hh_weighted_avg_2021, by = "stat") %>%
+  left_join(.,barking_hh_weighted_avg_2021, by = "stat") %>%
+  mutate(ldn_comparison = riverside_pct - ldn_avg_weighted) %>%
+  group_by(stat) %>%
+  summarise(riverside_prop_2021 = weighted.mean(riverside_pct, all_households),
+            london_average_2021 = first(ldn_avg_weighted),
+            barking_average_2021 = first(bark_avg_weighted))
+
+
+
+
+riverside2011_hh = households2011 %>%
+  filter(lsoa_code %in% riverside_list) %>%
+  pivot_longer(cols = ends_with("_pct"), 
+    names_to = "stat",
+    values_to = "riverside_pct"
+  ) %>%
+  left_join(.,hh_weighted_avg_2011, by = "stat") %>%
+  left_join(.,barking_hh_weighted_avg_2011, by = "stat") %>%
+  mutate(ldn_comparison = riverside_pct - ldn_avg_weighted) %>%
+  group_by(stat) %>%
+  summarise(riverside_prop_2011 = weighted.mean(riverside_pct, all_households),
+            london_average_2011 = first(ldn_avg_weighted),
+            barking_average_2011 = first(bark_avg_weighted))
+```
+
+## Accom Type Change
+
+```{r}
+riverside2021_hh %>%
+  left_join(.,riverside2011_hh, by = "stat") %>%
+  filter(stat %in% colnames(accomtype2011)) %>%
+  mutate(riverside_change = riverside_prop_2021 - riverside_prop_2011,
+         london_change =  london_average_2021 - london_average_2011,
+         barking_change = barking_average_2021 - barking_average_2011) %>%
+  kable()
+```
+
+### Household Composition changes
+
+```{r}
+riverside2021_hh %>%
+  left_join(.,riverside2011_hh, by = "stat") %>%
+  filter(stat %in% colnames(hholdcomposition2021)) %>%
+  mutate(riverside_change = riverside_prop_2021 - riverside_prop_2011,
+         london_change =  london_average_2021 - london_average_2011,
+         barking_change = barking_average_2021 - barking_average_2011) %>%
+  kable()
+```
+
+## Tenure Change
+
+```{r}
+riverside2021_hh %>%
+  left_join(.,riverside2011_hh, by = "stat") %>%
+  filter(stat %in% colnames(tenure2011)) %>%
+  mutate(riverside_change = riverside_prop_2021 - riverside_prop_2011,
+         london_change =  london_average_2021 - london_average_2011,
+         barking_change = barking_average_2021 - barking_average_2011) %>%
+  kable()
+```
+
+## 2021 - within borough analysis
+
+```{r}
+households_sf <- london2021 %>%
+  select(lsoa_code, lad22cd, geometry) %>% 
+  left_join(households2021, by = "lsoa_code") %>%
+  filter(lad22cd == "E09000002")
+
+target_lsoa <- "E01034478"
+```
+
+```{r}
+riverside_sf <- households_sf %>%
+  filter(lsoa_code %in% riverside_list)
+
+
+riverside_boundary <- riverside_sf |>
+  sf::st_make_valid() |>
+  dplyr::summarise()
+
+
+target_sf <- households_sf %>%
+  filter(lsoa_code == "E01034478")
+```
+
+barking and dagenham weighted averages
+
+```{r}
+barking_avg_2021 <- households_sf %>%  st_drop_geometry() %>%
+  summarise(across(
+    where(is.numeric) & !any_of("all_households"),
+    ~ weighted.mean(.x, w = all_households, na.rm = TRUE)
+  )) 
+
+```
+
+calculating standard deviation from borough mean
+
+```{r}
+households_2021 <- households_sf %>%  st_drop_geometry()
+
+
+profile_cols <- households_2021 %>%  
+  select(where(is.numeric)) %>%
+  names() %>%
+  setdiff("all_households")
+
+bor_stats <- households_2021 %>%
+  summarise(across(all_of(profile_cols),
+                   list(mean = ~mean(.x, na.rm = TRUE),
+                        sd   = ~sd(.x,   na.rm = TRUE))))
+
+
+bor_means <- as.numeric(bor_stats[1, paste0(profile_cols, "_mean")])
+names(bor_means) <- profile_cols
+
+bor_sds   <- as.numeric(bor_stats[1, paste0(profile_cols, "_sd")])
+names(bor_sds) <- profile_cols
+
+# Riverside site values
+target_row <- households_2021 %>% filter(lsoa_code == target_lsoa)
+
+# Deviations + z-scores
+out <- tibble(
+  variable      = profile_cols,
+  target_value  = as.numeric(target_row[profile_cols]),
+  borough_mean  = unname(bor_means[profile_cols]),
+  borough_sd    = unname(bor_sds[profile_cols])
+) %>%
+  mutate(
+    diff    = target_value - borough_mean,
+    z_score = ifelse(is.finite(borough_sd) & borough_sd > 0, diff / borough_sd, NA_real_)
+  ) %>%
+  arrange(desc(abs(z_score)))
+
+out %>% kable()
+```
+
+
+## Maps
+
+```{r}
+station <- st_read("data/BRE_station.gpkg")  
+```
+
+```{r}
+map <- tm_shape(st_as_sf(households_sf)) +
+   tm_fill(
+    col = "owned_with_a_mortgage_or_loan_pct",
+    palette = "reds",
+    alpha   = 0.5,
+    title   = "Households owned with a mortage or loan (2021 %)"
+  ) +
+  tm_borders(lwd = 0.5, col = "grey50") +
+  tm_shape(target_sf) +
+  tm_borders(lwd = 3, col = "black") +
+  tm_shape(riverside_boundary) +
+  tm_borders(lwd = 2, col = "black") +
+  tm_shape(station) +
+  tm_symbols(size = 0.5, shape = 21, fill = "yellow", col = "black", lwd = 1.2)
+
+map
+```
+
+
+
+```{r}
+map <- tm_shape(st_as_sf(households_sf)) +
+   tm_fill(
+    col = "shared_ownership_pct",
+    palette = "reds",
+    alpha   = 0.5,
+    title   = "Households with shared ownership (2021 %)"
+  ) +
+  tm_borders(lwd = 0.5, col = "grey50") +
+  tm_shape(target_sf) +
+  tm_borders(lwd = 3, col = "black") +
+  tm_shape(riverside_boundary) +
+  tm_borders(lwd = 2, col = "black") +
+  tm_shape(station) +
+  tm_symbols(size = 0.5, shape = 21, fill = "yellow", col = "black", lwd = 1.2)
+
+map
+```
+
+
+```{r}
+map <- tm_shape(st_as_sf(households_sf)) +
+   tm_fill(
+    col = "married_or_civil_partnership_couple_no_children_pct",
+    palette = "reds",
+    alpha   = 0.5,
+    title   = "Married/Civil partnership with no children (2021 households %)"
+  ) +
+  tm_borders(lwd = 0.5, col = "grey50") +
+  tm_shape(target_sf) +
+  tm_borders(lwd = 3, col = "black") +
+  tm_shape(riverside_boundary) +
+  tm_borders(lwd = 2, col = "black") +
+  tm_shape(station) +
+  tm_symbols(size = 0.5, shape = 21, fill = "yellow", col = "black", lwd = 1.2)
+
+map
+```

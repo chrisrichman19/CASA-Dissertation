@@ -1,0 +1,562 @@
+---
+title: "census_residents"
+output: html_document
+date: "2025-08-16"
+---
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(sf)
+library(kableExtra)
+library(tmap)
+library(tmaptools)
+```
+
+## Creating Residents dataset
+
+Loading in census data for 2011
+
+changing / aggregating columns if needed
+
+Converting to %
+
+### Age
+
+```{r}
+age2021 <- read_csv("censusdata/age2021.csv") %>%
+  clean_names() %>%
+  mutate(lsoa_code, all_usual_residents,
+         aged_0_to_14 = aged_4_and_under + aged_5_to_9 + 
+      aged_10_to_14,
+         aged_15_to_24 = aged_15_to_19 + aged_20_to_24,
+         aged_25_to_34 = aged_25_to_29 + aged_30_to_34,
+         aged_35_to_44 = aged_35_to_39 + aged_40_to_44,
+         aged_45_to_64 = aged_45_to_49 + aged_50_to_54 + aged_55_to_59 + aged_60_to_64,
+         aged_65_plus = aged_65_to_69 + aged_70_to_74 + aged_75_to_79 + aged_80_to_84 +
+        aged_85_and_over) %>%
+  transmute(lsoa_code,
+         all_usual_residents,
+         aged_0_to_14_pct = (aged_0_to_14/all_usual_residents)*100,
+         aged_15_to_24_pct = (aged_15_to_24/all_usual_residents)*100,
+         aged_25_to_34_pct = (aged_25_to_34/all_usual_residents)*100,
+         aged_35_to_44_pct = (aged_35_to_44/all_usual_residents)*100,
+         aged_45_to_64_pct = (aged_45_to_64/all_usual_residents)*100,
+         aged_65_plus_pct = (aged_65_plus/all_usual_residents)*100)
+```
+
+```{r}
+age2011 <- read_csv("censusdata/age2011.csv") %>%
+  clean_names() %>%
+  mutate(lsoa_code, all_usual_residents,
+         aged_0_to_14 = aged_4_and_under + aged_5_to_9 + 
+      aged_10_to_14,
+         aged_15_to_24 = aged_15_to_19 + aged_20_to_24,
+         aged_25_to_34 = aged_25_to_29 + aged_30_to_34,
+         aged_35_to_44 = aged_35_to_39 + aged_40_to_44,
+         aged_45_to_64 = aged_45_to_49 + aged_50_to_54 + aged_55_to_59 + aged_60_to_64,
+         aged_65_plus = aged_65_to_69 + aged_70_to_74 + aged_75_to_79 + aged_80_to_84 +
+        aged_85_and_over) %>%
+  transmute(lsoa_code,
+         all_usual_residents,
+         aged_0_to_14_pct = (aged_0_to_14/all_usual_residents)*100,
+         aged_15_to_24_pct = (aged_15_to_24/all_usual_residents)*100,
+         aged_25_to_34_pct = (aged_25_to_34/all_usual_residents)*100,
+         aged_35_to_44_pct = (aged_35_to_44/all_usual_residents)*100,
+         aged_45_to_64_pct = (aged_45_to_64/all_usual_residents)*100,
+         aged_65_plus_pct = (aged_65_plus/all_usual_residents)*100)
+```
+
+### Economic Activity
+
+```{r}
+ecoactivity2021 = read_csv("censusdata/ecoactivity2021.csv") %>%
+  clean_names() %>%
+  transmute(lsoa_code,
+            across(
+    .cols = where(is.numeric) & !all_of("all_usual_residents_aged_16_or_over"),
+    .fns = ~ (.x / all_usual_residents_aged_16_or_over) * 100,
+    .names = "{.col}_pct"
+  ))
+
+
+ecoactivity2011 = read_csv("censusdata/ecoactivity2011.csv") %>%
+  clean_names() %>%
+  transmute(lsoa_code,
+            across(
+    .cols = where(is.numeric) & !all_of("all_usual_residents_aged_16_74"),
+    .fns = ~ (.x / all_usual_residents_aged_16_74) * 100,
+    .names = "{.col}_pct"
+  ))
+```
+
+### NSSEC
+
+```{r}
+NSSEC2021 = read_csv("censusdata/NSSEC2021.csv") %>%
+  clean_names() %>%
+  transmute(lsoa_code,
+            across(
+    .cols = where(is.numeric) & !all_of("all_usual_residents_aged_16"),
+    .fns = ~ (.x / all_usual_residents_aged_16) * 100,
+    .names = "{.col}_pct"
+  ))
+
+
+
+NSSEC2011 = read_csv("censusdata/NSSEC2011.csv") %>%
+  clean_names() %>%
+  transmute(lsoa_code,
+            across(
+    .cols = where(is.numeric) & !all_of("all_usual_residents_aged_16_74"),
+    .fns = ~ (.x / all_usual_residents_aged_16_74) * 100,
+    .names = "{.col}_pct"
+  ))
+```
+
+### Occupation
+
+```{r}
+occupation2021 = read_csv("censusdata/occupation2021.csv") %>%
+  clean_names() %>%
+  transmute(lsoa_code,
+            across(
+    .cols = where(is.numeric) & !all_of("all_usual_residents_aged_16_and_over_in_employment"),
+    .fns = ~ (.x / all_usual_residents_aged_16_and_over_in_employment) * 100,
+    .names = "{.col}_pct"
+  ))
+
+
+occupation2011 = read_csv("censusdata/occupation2011.csv") %>%
+  clean_names() %>%
+  transmute(lsoa_code,
+            across(
+    .cols = where(is.numeric) & !all_of("all_usual_residents_aged_16_74_in_employment"),
+    .fns = ~ (.x / all_usual_residents_aged_16_74_in_employment) * 100,
+    .names = "{.col}_pct"
+  ))
+```
+
+### Qualifications
+
+```{r}
+qualification2021 = read_csv("censusdata/qualification2021.csv") %>%
+  clean_names() %>%
+  transmute(lsoa_code,
+            across(
+    .cols = where(is.numeric) & !all_of("usual_residents_aged_16"),
+    .fns = ~ (.x / usual_residents_aged_16) * 100,
+    .names = "{.col}_pct"
+  )) %>%
+  rename(no_qualifications_pct = none_pct,
+         other_qualifications_pct = other_pct,) # renaming for clarity when merging
+
+
+qualification2011 = read_csv("censusdata/qualification2011.csv") %>%
+  clean_names() %>%
+  transmute(lsoa_code,
+            across(
+    .cols = where(is.numeric) & !all_of("usual_residents_aged_16"),
+    .fns = ~ (.x / usual_residents_aged_16) * 100,
+    .names = "{.col}_pct"
+  ))
+```
+
+extracting population data
+
+```{r}
+pop_2021 <- age2021 %>%
+  select(c(1,2)) %>%
+  rename(pop_2021 = all_usual_residents)
+
+pop_2011 <- age2011 %>%
+  select(c(1,2)) %>%
+  rename(pop_2011 = all_usual_residents)
+```
+
+### Merging together
+
+```{r}
+census2011 <- list(
+  age2011, ecoactivity2011, NSSEC2011, 
+  occupation2011, qualification2011
+)
+
+
+
+census2021 <- list(
+  age2021, ecoactivity2021,NSSEC2021, 
+  occupation2021, qualification2021
+)
+```
+
+```{r}
+residents2011 <- reduce(census2011, full_join, by = "lsoa_code") %>%
+  replace(is.na(.), 0)
+
+residents2021 <- reduce(census2021, full_join, by = "lsoa_code")
+```
+
+### Shapefile
+
+```{r}
+shapefiles <- list.files("barking/LB_shp/", pattern = "\\.shp$", full.names = TRUE)
+
+london2021 <- shapefiles %>%
+  map(~ st_read(.x, quiet = TRUE) %>% st_transform(27700)) %>%
+  bind_rows() %>%
+  rename(lsoa_code = lsoa21cd)
+```
+
+extracting London borough column
+
+```{r}
+boroughs <- london2021 %>%
+  select(c(1,5)) %>%
+  st_drop_geometry()
+```
+
+List of riverside lsoas
+
+```{r}
+riverside_list = list("E01034476", "E01034477",  "E01000094", "E01000095", "E01034475","E01034478", "E01000093", "E01000091")
+```
+
+## Change Dataset
+
+```{r}
+common_cols <- intersect(names(residents2011), names(residents2021))
+common_cols <- setdiff(common_cols, "lsoa_code")
+
+numeric_cols <- common_cols[
+  sapply(residents2011[common_cols], is.numeric) & 
+  sapply(residents2021[common_cols], is.numeric)
+]
+
+change_residents <- residents2011 %>%
+  select(lsoa_code, all_of(numeric_cols)) %>%
+  inner_join(
+    residents2021 %>% select(lsoa_code, all_of(numeric_cols)),
+    by = "lsoa_code",
+    suffix = c("_2011", "_2021")
+  ) %>%
+  mutate(across(
+    ends_with("_2021"),
+    .fns = ~ . - get(sub("_2021", "_2011", cur_column())),
+    .names = "{sub('_2021', '', .col)}_change"
+  )) %>%
+  select(lsoa_code, ends_with("_change")) %>%
+  full_join(.,pop_2021,by="lsoa_code") %>%
+  full_join(.,pop_2011,by="lsoa_code") %>% 
+  full_join(.,boroughs,by="lsoa_code")
+```
+
+### London Weighted Proportion CHANGE
+
+```{r}
+res_weighted_avg_2021 <- residents2021 %>%
+  full_join(pop_2021, by="lsoa_code") %>%
+  select(where(is.numeric), -matches("code|ID", ignore.case = TRUE)) %>%
+  summarise(across(
+    ends_with("_pct"),
+    ~ weighted.mean(.x, w = pop_2021, na.rm = TRUE),
+    .names = "{.col}"
+  )) %>%
+  pivot_longer(everything(), names_to = "stat", values_to = "ldn_avg_weighted")
+
+
+res_weighted_avg_2011 <- residents2011 %>%
+  full_join(pop_2011, by="lsoa_code") %>%
+  select(where(is.numeric), -matches("code|ID", ignore.case = TRUE)) %>%
+  summarise(across(
+    ends_with("_pct"),
+    ~ weighted.mean(.x, w = pop_2011, na.rm = TRUE),
+    .names = "{.col}"
+  )) %>%
+  pivot_longer(everything(), names_to = "stat", values_to = "ldn_avg_weighted")
+```
+
+### Barking and Dagenham (Excluding Riverside) Weighed Proportion CHANGE
+
+```{r}
+barking_res_weighted_avg_2021 <- residents2021 %>%
+  full_join(.,boroughs, by="lsoa_code") %>%
+  filter(lad22cd == "E09000002" & !(lsoa_code %in% riverside_list)) %>%
+  full_join(pop_2021, by="lsoa_code") %>%
+  select(where(is.numeric), -matches("code|ID", ignore.case = TRUE)) %>%
+  summarise(across(
+    ends_with("_pct"),
+    ~ weighted.mean(.x, w = pop_2021, na.rm = TRUE),
+    .names = "{.col}"
+  )) %>%
+  pivot_longer(everything(), names_to = "stat", values_to = "bark_avg_weighted")
+
+
+barking_res_weighted_avg_2011 <- residents2011 %>%
+  full_join(.,boroughs, by="lsoa_code") %>%
+  filter(lad22cd == "E09000002" & !(lsoa_code %in% riverside_list)) %>%
+  full_join(pop_2011, by="lsoa_code") %>%
+  select(where(is.numeric), -matches("code|ID", ignore.case = TRUE)) %>%
+  summarise(across(
+    ends_with("_pct"),
+    ~ weighted.mean(.x, w = pop_2011, na.rm = TRUE),
+    .names = "{.col}"
+  )) %>%
+  pivot_longer(everything(), names_to = "stat", values_to = "bark_avg_weighted")
+```
+
+### Riverside 
+
+```{r}
+riverside2021_res = residents2021 %>%
+  filter(lsoa_code %in% riverside_list) %>%
+  pivot_longer(cols = ends_with("_pct"), 
+    names_to = "stat",
+    values_to = "riverside_pct"
+  ) %>%
+  left_join(.,res_weighted_avg_2021, by = "stat") %>%
+  left_join(.,barking_res_weighted_avg_2021, by = "stat") %>%
+  mutate(ldn_comparison = riverside_pct - ldn_avg_weighted) %>%
+  group_by(stat) %>%
+  summarise(riverside_prop_2021 = weighted.mean(riverside_pct, all_usual_residents),
+            london_average_2021 = first(ldn_avg_weighted),
+            barking_average_2021 = first(bark_avg_weighted))
+```
+
+```{r}
+riverside2011_res = residents2011 %>%
+  filter(lsoa_code %in% riverside_list) %>%
+  pivot_longer(cols = ends_with("_pct"), 
+    names_to = "stat",
+    values_to = "riverside_pct"
+  ) %>%
+  left_join(.,res_weighted_avg_2011, by = "stat") %>%
+  left_join(.,barking_res_weighted_avg_2011, by = "stat") %>%
+  mutate(ldn_comparison = riverside_pct - ldn_avg_weighted) %>%
+  group_by(stat) %>%
+  summarise(riverside_prop_2011 = weighted.mean(riverside_pct, all_usual_residents),
+            london_average_2011 = first(ldn_avg_weighted),
+            barking_average_2011 = first(bark_avg_weighted))
+```
+
+### Age Change Comparison
+
+```{r}
+riverside2021_res %>%
+  left_join(.,riverside2011_res, by = "stat") %>%
+  filter(str_detect(stat,"^aged")) %>%
+  mutate(riverside_change = riverside_prop_2021 - riverside_prop_2011,
+         london_change =  london_average_2021 - london_average_2011,
+         barking_change = barking_average_2021 - barking_average_2011) %>%
+  kable()
+```
+
+### Economic activity Change Comparison
+
+```{r}
+riverside2021_res %>%
+  left_join(.,riverside2011_res, by = "stat") %>%
+  filter(str_detect(stat,"^economically")) %>%
+  mutate(riverside_change = riverside_prop_2021 - riverside_prop_2011,
+         london_change =  london_average_2021 - london_average_2011,
+         barking_change = barking_average_2021 - barking_average_2011) %>%
+  kable()
+```
+
+### NSSEC CHANGE comparison
+
+```{r}
+riverside2021_res %>%
+  left_join(.,riverside2011_res, by = "stat") %>%
+  filter(stat %in% colnames(NSSEC2011)) %>%
+  mutate(riverside_change = riverside_prop_2021 - riverside_prop_2011,
+         london_change =  london_average_2021 - london_average_2011,
+         barking_change = barking_average_2021 - barking_average_2011) %>%
+  kable()
+```
+
+### Occupation Change
+
+```{r}
+riverside2021_res %>%
+  left_join(.,riverside2011_res, by = "stat") %>%
+  filter(stat %in% colnames(occupation2011)) %>%
+  mutate(riverside_change = riverside_prop_2021 - riverside_prop_2011,
+         london_change =  london_average_2021 - london_average_2011,
+         barking_change = barking_average_2021 - barking_average_2011) %>%
+  kable()
+```
+
+### Qualification Change
+
+```{r}
+riverside2021_res %>%
+  left_join(.,riverside2011_res, by = "stat") %>%
+  filter(stat %in% colnames(qualification2021)) %>%
+  mutate(riverside_change = riverside_prop_2021 - riverside_prop_2011,
+         london_change =  london_average_2021 - london_average_2011,
+         barking_change = barking_average_2021 - barking_average_2011) %>%
+  kable()
+```
+
+## 2021 - within borough analysis
+
+```{r}
+residents_sf <- london2021 %>%
+  select(lsoa_code, lad22cd, geometry) %>% 
+  left_join(residents2021, by = "lsoa_code") %>%
+  filter(lad22cd == "E09000002")
+
+target_lsoa <- "E01034478"
+```
+
+```{r}
+riverside_sf <- residents_sf %>%
+  filter(lsoa_code %in% riverside_list)
+
+
+riverside_boundary <- riverside_sf |>
+  sf::st_make_valid() |>
+  dplyr::summarise()
+
+
+target_sf <- residents_sf %>%
+  filter(lsoa_code == "E01034478")
+```
+
+barking and dagenham weighted averages
+
+```{r}
+barking_avg_2021 <- residents_sf %>%  st_drop_geometry() %>%
+  summarise(across(
+    where(is.numeric) & !any_of("all_usual_residents"),
+    ~ weighted.mean(.x, w = all_usual_residents, na.rm = TRUE)
+  )) 
+
+```
+
+calculating standard deviation from borough mean
+
+```{r}
+residents_2021 <- residents_sf %>%  st_drop_geometry()
+
+
+profile_cols <- residents_2021 %>%  
+  select(where(is.numeric)) %>%
+  names() %>%
+  setdiff("all_usual_population")
+
+bor_stats <- residents_2021 %>%
+  summarise(across(all_of(profile_cols),
+                   list(mean = ~mean(.x, na.rm = TRUE),
+                        sd   = ~sd(.x,   na.rm = TRUE))))
+
+# Tidy named vectors for easy use
+bor_means <- as.numeric(bor_stats[1, paste0(profile_cols, "_mean")])
+names(bor_means) <- profile_cols
+
+bor_sds   <- as.numeric(bor_stats[1, paste0(profile_cols, "_sd")])
+names(bor_sds) <- profile_cols
+
+# Riverside site values
+target_row <- residents_2021 %>% filter(lsoa_code == target_lsoa)
+
+# Deviations + z-scores
+out <- tibble(
+  variable      = profile_cols,
+  target_value  = as.numeric(target_row[profile_cols]),
+  borough_mean  = unname(bor_means[profile_cols]),
+  borough_sd    = unname(bor_sds[profile_cols])
+) %>%
+  mutate(
+    diff    = target_value - borough_mean,
+    z_score = ifelse(is.finite(borough_sd) & borough_sd > 0, diff / borough_sd, NA_real_)
+  ) %>%
+  arrange(desc(abs(z_score)))
+
+out %>% kable()
+```
+
+## Maps
+
+```{r}
+station <- st_read("data/BRE_station.gpkg")  
+```
+
+```{r}
+tmap_mode(mode = "plot")
+
+map <- tm_shape(st_as_sf(residents_sf)) +
+   tm_fill(
+    col = "economically_active_employee_full_time_pct",
+    palette = "reds",
+    alpha   = 0.5,
+    title   = "Full-time employment - (economically active %)"
+  ) +
+  tm_borders(lwd = 0.5, col = "grey50") +
+  tm_shape(target_sf) +
+  tm_borders(lwd = 3, col = "black") +
+  tm_shape(riverside_boundary) +
+  tm_borders(lwd = 2, col = "black") +
+  tm_shape(station) +
+  tm_symbols(size = 0.5, shape = 21, fill = "yellow", col = "black", lwd = 1.2)
+
+map
+```
+
+```{r}
+map <- tm_shape(st_as_sf(residents_sf)) +
+   tm_fill(
+    col = "aged_25_to_34_pct",
+    palette = "reds",
+    alpha   = 0.5,
+    title   = "Residents aged 25 to 34 (%)"
+  ) +
+  tm_borders(lwd = 0.5, col = "grey50") +
+  tm_shape(target_sf) +
+  tm_borders(lwd = 3, col = "black") +
+  tm_shape(riverside_boundary) +
+  tm_borders(lwd = 2, col = "black") +
+  tm_shape(station) +
+  tm_symbols(size = 0.5, shape = 21, fill = "yellow", col = "black", lwd = 1.2)
+
+map
+```
+
+```{r}
+map <- tm_shape(st_as_sf(residents_sf)) +
+   tm_fill(
+    col = "higher_managerial_admin_and_professional_pct",
+    palette = "reds",
+    alpha   = 0.5,
+    title   = "Higher Managerial Admin and Professional (%)"
+  ) +
+  tm_borders(lwd = 0.5, col = "grey50") +
+  tm_shape(target_sf) +
+  tm_borders(lwd = 3, col = "black") +
+  tm_shape(riverside_boundary) +
+  tm_borders(lwd = 2, col = "black") +
+  tm_shape(station) +
+  tm_symbols(size = 0.5, shape = 21, fill = "yellow", col = "black", lwd = 1.2)
+
+map
+```
+
+```{r}
+map <- tm_shape(st_as_sf(residents_sf)) +
+   tm_fill(
+    col = "level_4_pct",
+    palette = "reds",
+    alpha   = 0.5,
+    title   = "Level 4 Qualifications (%)"
+  ) +
+  tm_borders(lwd = 0.5, col = "grey50") +
+  tm_shape(target_sf) +
+  tm_borders(lwd = 3, col = "black") +
+  tm_shape(riverside_boundary) +
+  tm_borders(lwd = 2, col = "black") +
+  tm_shape(station) +
+  tm_symbols(size = 0.5, shape = 21, fill = "yellow", col = "black", lwd = 1.2)
+
+map
+```

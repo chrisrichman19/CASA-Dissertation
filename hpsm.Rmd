@@ -1,0 +1,130 @@
+---
+title: "hpsm"
+output: html_document
+date: "2025-08-17"
+---
+
+```{r}
+library(tidyverse)
+```
+
+### House price data (per square meter)
+
+- Load in postcode to LSOA lookup file in order to convert house price dataset from Postcode to LSOA aggregation.
+```{r}
+pc <- read_csv(file="PostcodeLookup/lookup.csv") %>%
+  select(pcds,lsoa21cd,lsoa21nm)
+```
+
+House price data  for each London Borough
+```{r}
+path = "hpm_la_2024/"
+
+hpm_files <- list.files(path = path, pattern = "_link_26122024\\.csv$", full.names = TRUE)
+
+hpm <- map_dfr(hpm_files, ~ read_csv(.x, col_types = cols(.default = col_character())))
+```
+
+```{r}
+hpm_clean <- hpm %>%
+  select(1,2,7,8) %>%
+  mutate(priceper = as.numeric(priceper))
+```
+
+```{r}
+hpm_grouped <- hpm_clean %>%
+  left_join(.,pc, by = c("postcode" = "pcds")) %>%
+  group_by(year, lsoa21cd, lsoa21nm) %>%
+  summarise(priceper = round(mean(priceper),0)) %>%
+  mutate(year = as.numeric(year))
+```
+
+```{r}
+hpm_wide <- hpm_grouped %>%
+  select(lsoa21cd, year, priceper) %>%
+  pivot_wider(
+    names_from = year,
+    values_from = priceper,
+    names_prefix = "priceper_"
+  )
+```
+
+
+2021 LSOA boundaries for riverside research area
+```{r}
+riverside_list2021 = list("E01034476", "E01034477",  "E01000094", "E01000095", "E01034475","E01034478", "E01000093", "E01000091")
+```
+
+```{r}
+
+hpm_riverside <- hpm_grouped %>%
+  filter(lsoa21cd %in% riverside_list2021) %>%
+  mutate(year = as.numeric(year)) 
+
+riverside_average_price_per_year <- hpm_riverside %>%
+  group_by(year) %>%
+  summarise(avg_priceper = mean(priceper, na.rm = TRUE)) %>%
+  mutate(group_type = "Riverside Average")
+
+barking_average_price_per_year <- hpm_grouped %>%
+  filter(str_detect(lsoa21nm, "^Barking"),
+         !lsoa21cd %in% riverside_list2021) %>%
+  group_by(year) %>%
+  summarise(avg_priceper = mean(priceper, na.rm = TRUE)) %>%
+  mutate(group_type = "Barking Average (excl. Riverside)")
+
+london_average_price_per_year <- hpm_grouped %>%
+  group_by(year) %>%
+  summarise(avg_priceper = mean(priceper, na.rm = TRUE)) %>%
+  mutate(group_type = "London Average")
+
+all_averages <- bind_rows(
+  riverside_average_price_per_year,
+  barking_average_price_per_year,
+  london_average_price_per_year
+)
+
+
+```
+
+```{r}
+ggplot(hpm_riverside, aes(x = year, y = priceper, color = lsoa21cd)) +
+  geom_line(size = 1) +
+  labs(
+    title = "Year by Year price per square meter for houses sold in Barking Riverside",
+    x = "Year",
+    y = "Average difference",
+    color = "LSOA Code"
+  )
+```
+
+
+```{r}
+ggplot(hpm_riverside, aes(x = year, y = priceper)) +
+  geom_line(aes(group = lsoa21cd, color = "Individual LSOAs"), size = 0.5, alpha = 0.3) +
+  geom_line(data = all_averages, aes(y = avg_priceper, color = group_type), size = 1.2, linetype = "solid") +
+  labs(
+    title = "Year by Year price per square meter for houses sold",
+    x = "Year",
+    y = "Average Price per Square Meter",
+    color = "Line Type" 
+  ) +
+  scale_color_manual(
+    values = c(
+      "Individual Riverside LSOAs" = "grey",
+      "Riverside Average" = "blue",
+      "Barking Average (excl. Riverside)" = "red",
+      "London Average" = "darkgreen"
+    ),
+    breaks = c("Riverside Average", "Barking Average (excl. Riverside)", "London Average", "Individual LSOAs")
+  ) +
+  theme_minimal() + 
+  theme(
+    legend.position = "right", 
+    plot.title = element_text(hjust = 0.5, face = "bold"), 
+    axis.title = element_text(face = "bold")
+  )
+```
+
+
+

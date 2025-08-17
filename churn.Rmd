@@ -1,0 +1,559 @@
+---
+title: "churn"
+output: html_document
+date: "2025-08-17"
+---
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(sf)
+library(kableExtra)
+```
+
+
+## Loading Churn data:
+
+The Residential Mobility Index provides an estimate of the "churn" of the residential population in the UK - the proportion of households that have changed between the beginning of 2023 and the end of each of each year going back to 1997.
+
+
+```{r}
+churn <- read_csv("hh_churn_lsoa11_2023.csv")
+```
+
+#### joining by London boundaries
+
+```{r}
+london <- st_read("barking/LSOA_2011_London_gen_MHW.shp") %>%
+  st_transform(.,27700) 
+
+london_lsoa = london$LSOA11CD
+```
+
+```{r}
+churn_london <- london %>%
+  left_join(., churn, by = c("LSOA11CD"="area"))
+```
+
+### Deprivation Churn dataset
+
+Residential Mobility and Deprivation (RMD) data provide yearly estimates of the mean differences of residential mobility and deprivation of all known adults’ moves to, from and within each neighbourhood. Data are provided for 1997-2023 on small area estimates across the UK, comprising of Lower Layer Super Output Area for England and Wales (LSOA)
+
+```{r}
+RMD_in <- read_csv("rmd/RMD_in_LSOA_releasedata.csv", na= c("*", "NA")) %>%
+  clean_names()
+```
+
+```{r}
+RMD_out <- read_csv("rmd/RMD_out_LSOA_releasedata.csv", na= c("*", "NA")) %>%
+  clean_names()
+```
+
+### Loading in IMD (indices of deprivation data)
+
+### IMD (Deprivation)
+
+```{r}
+#10 = least deprived , 1 = most deprived
+
+imd2019 <- read_csv("data/imd_2019_london.csv") %>%
+  select(c(1:4)) %>%
+  rename(imd_rank_2019 = england_imd_rank,
+         imd_decile_2019 = england_imd_decile)
+
+
+#2010 and 2015
+imd2010and2015 <- read_csv("data/imd2010adj_2015.csv") %>%
+  clean_names() %>%
+  filter(lsoa_code_2011 %in% london_lsoa) %>%
+  select(c(1,7,8,10,11)) %>%
+  rename(imd_rank_2010 = x2010imd_rank,
+         imd_decile_2010 = x2010national_decile2,
+         imd_rank_2015 = x2015index_of_multiple_deprivation_imd_rank_where_1_is_most_deprived,
+         imd_decile_2015 = x2015index_of_multiple_deprivation_imd_decile_where_1_is_most_deprived_10_percent_of_lso_as)
+
+
+#joining together
+imd_london <- imd2019 %>%
+  left_join(.,imd2010and2015, by=c("ls11cd"="lsoa_code_2011"))
+
+imd_london_long <- imd_london %>%
+  pivot_longer(
+    cols = matches("^imd_(rank|decile)_\\d{4}$"),
+    names_to = c(".value", "year"),
+    names_pattern = "^(imd_(?:rank|decile))_(\\d{4})$"
+  ) %>%
+  mutate(year = as.integer(year))
+
+```
+
+
+
+
+
+
+## Plotting
+
+2011 LSOA boundaries for Riverside area - matches same study area as 2021 boundaries in other file
+```{r}
+riverside_list = list("E01000092", "E01000094","E01000095", "E01000091", "E01000093")
+```
+
+## Residential Churn over time
+
+
+```{r}
+churn_long_all <- churn_london %>%
+  pivot_longer(
+    cols = starts_with("chn"),
+    names_to = "year",
+    values_to = "churn_rate"
+  ) %>%
+  mutate(
+    year = as.integer(sub("chn", "", year)),
+    in_riverside = LSOA11CD %in% riverside_list
+  )
+
+churn_riverside <- churn_long_all %>% filter(in_riverside)
+
+churn_riverside2 <- churn_long_all %>% 
+  filter(in_riverside) %>%
+  mutate(churn_rate = 1 - churn_rate)
+  
+```
+
+
+calculating the average churn for each group for each year
+```{r}
+riverside_avg <- churn_long_all %>%
+  filter(in_riverside) %>%
+  group_by(year) %>%
+  summarise(avg_churn = mean(churn_rate, na.rm = TRUE), .groups = "drop") %>%
+  mutate(group_type = "Riverside Average")
+
+barking_avg_excl <- churn_long_all %>%
+  filter(str_detect(LAD11NM, "^Barking"), !in_riverside) %>%
+  group_by(year) %>%
+  summarise(avg_churn = mean(churn_rate, na.rm = TRUE), .groups = "drop") %>%
+  mutate(group_type = "Barking Average (excl. Riverside)")
+
+barking_borough_excl = churn_long_all %>%
+  filter(str_detect(LAD11NM, "^Barking"), !in_riverside) %>%
+  select(LSOA11CD) # for later
+
+london_avg <- churn_long_all %>%
+  group_by(year) %>%
+  summarise(avg_churn = mean(churn_rate, na.rm = TRUE), .groups = "drop") %>%
+  mutate(group_type = "London Average")
+
+all_averages_churn <- bind_rows(riverside_avg, barking_avg_excl, london_avg)
+
+all_averages_churn_2 <- all_averages_churn %>%
+  mutate(avg_churn_rev = 1 - avg_churn)
+```
+
+
+
+```{r}
+ggplot() +
+  geom_line(
+    data = churn_riverside2,
+    aes(x = year, y = churn_rate, group = LSOA11CD, color = "Individual LSOAs"),
+    size = 0.5, alpha = 0.3
+  ) +
+  geom_line(
+    data = all_averages_churn_2,
+    aes(x = year, y = avg_churn_rev, color = group_type),
+    size = 1.2
+  ) +
+  labs(
+    title = "Assembly of 2023 residents (1997-2023)",
+    subtitle = "Built from annual similarity gains; rises to 100% by 2023",
+    x = "Year",
+    y = "Share of 2023 residents present",
+    color = ""
+  ) +
+  scale_color_manual(
+    values = c(
+      "Individual LSOAs" = "grey50",
+      "Riverside Average" = "blue",
+      "Barking Average (excl. Riverside)" = "red",
+      "London Average" = "darkgreen"
+    ),
+    breaks = c("Riverside Average", "Barking Average (excl. Riverside)", "London Average", "Individual LSOAs")
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title = element_text(face = "bold")
+  )
+```
+
+
+
+
+```{r}
+# Compute annual change for each LSOA in riverside
+churn_riverside_delta <- churn_riverside %>%
+  arrange(LSOA11CD, year) %>%
+  group_by(LSOA11CD) %>%
+  mutate(churn_change = churn_rate - lag(churn_rate)) %>%
+  ungroup() %>%
+  filter(!is.na(churn_change))
+
+# Compute annual change for london, barking borough and riverside 
+all_averages_churn_delta <- all_averages_churn %>%
+  arrange(group_type, year) %>%
+  group_by(group_type) %>%
+  mutate(avg_change = avg_churn - lag(avg_churn)) %>%
+  ungroup() %>%
+  filter(!is.na(avg_change))
+```
+
+**ANNUAL CHANGE in CHURN DATA**
+
+```{r}
+ggplot() +
+  geom_line(
+    data = churn_riverside_delta,
+    aes(x = year, y = churn_change, group = LSOA11CD, color = "Individual LSOAs"),
+    size = 0.5, alpha = 0.3
+  ) +
+  geom_line(
+    data = all_averages_churn_delta,
+    aes(x = year, y = avg_change, color = group_type),
+    size = 1.2
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    title = "Year-on-Year Change in Residential Churn",
+    x = "Year",
+    y = "Annual change in churn (proportion)",
+    color = ""
+  ) +
+  scale_color_manual(
+    values = c(
+      "Individual LSOAs" = "grey50",
+      "Riverside Average" = "blue",
+      "Barking Average (excl. Riverside)" = "red",
+      "London Average" = "darkgreen"
+    ),
+    breaks = c("Riverside Average", "Barking Average (excl. Riverside)", "London Average", "Individual LSOAs")
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title = element_text(face = "bold")
+  )
+```
+
+
+**When did the 2023 cohort arrive?**
+
+```{r}
+
+arrival_windows  <- all_averages_churn_delta %>% 
+  st_drop_geometry() %>%
+  select(1,3,4) %>%
+  mutate(
+    arrival_share = -avg_change,
+    window = case_when(
+      year %in% 1998:2002 ~ "1998–2002",
+      year %in% 2003:2007 ~ "2003–2007",
+      year %in% 2008:2012 ~ "2008–2012",
+      year %in% 2013:2017 ~ "2013–2017",
+      year %in% 2018:2022 ~ "2018–2022",
+      year == 2023        ~ "2023",
+    )
+  ) %>%
+  group_by(group_type, window) %>%
+  summarise(share = sum(arrival_share, na.rm = TRUE), .groups = "drop")
+
+#dd the "≤1997" group (1 minus sum of share column)
+pre_1997 <- arrival_windows %>%
+  group_by(group_type) %>%
+  summarise(share = pmax(0, 1 - sum(share, na.rm = TRUE)), .groups = "drop") %>%
+  mutate(window = "≤1997")
+
+arrival_windows <- bind_rows(arrival_windows, pre_1997) %>%
+  mutate(window = factor(window,
+                         levels = c("≤1997","1998–2002","2003–2007",
+                                    "2008–2012","2013–2017","2018–2022","2023"))) %>%
+  arrange(group_type, window)
+
+
+```
+
+
+```{r}
+arrival_windows %>%
+  mutate(
+    share = round(share, 3)) %>%
+  pivot_wider(
+    names_from = group_type,
+    values_from = share,
+    names_glue = "{.value} ({group_type})"
+  ) %>%
+  arrange(window) %>%
+  kable()
+
+```
+
+
+
+
+## RMD-IN CHURN
+
+```{r}
+RMD_in_long <- RMD_in %>%
+  pivot_longer(
+    cols = starts_with("x"),
+    names_to = "year",
+    values_to = "RMD"
+  ) %>%
+  mutate(year = as.integer(sub("x", "", year)),
+         in_riverside = lsoa %in% riverside_list)
+
+RMD_riverside <- RMD_in_long %>% filter(in_riverside)
+```
+
+
+```{r}
+riverside_avg <- RMD_in_long %>%
+  filter(in_riverside) %>%
+  group_by(year) %>%
+  summarise(avg_RMD = mean(RMD, na.rm = TRUE), .groups = "drop") %>%
+  mutate(group_type = "Riverside Average")
+
+barking_avg_excl <- RMD_in_long %>%
+  filter(lsoa %in% barking_borough_excl$LSOA11CD) %>%
+  group_by(year) %>%
+  summarise(avg_RMD = mean(RMD, na.rm = TRUE), .groups = "drop") %>%
+  mutate(group_type = "Barking Average (excl. Riverside)")
+
+london_avg <- RMD_in_long %>%
+  group_by(year) %>%
+  summarise(avg_RMD = mean(RMD, na.rm = TRUE), .groups = "drop") %>%
+  mutate(group_type = "London Average")
+
+all_averages_rmdin <- bind_rows(riverside_avg, barking_avg_excl, london_avg)
+```
+
+
+```{r}
+ggplot() +
+    geom_line(
+      data = RMD_in_long %>% filter(in_riverside),
+      aes(x = year, y = RMD, group = lsoa, color = "Individual LSOAs"),
+      size = 0.5, alpha = 0.3
+    ) +
+    # bold aggregates
+    geom_line(
+      data = all_averages_rmdin,
+      aes(x = year, y = avg_RMD, color = group_type),
+      size = 1.2
+    ) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    labs(
+      title = "RMD (IN): Moves Into LSOA",
+      x = "Year",
+      y = "RMD-IN (mean deprivation difference)",
+      color = ""
+    ) +
+    scale_color_manual(
+      values = c(
+        "Individual LSOAs" = "grey50",
+        "Riverside Average" = "blue",
+        "Barking Average (excl. Riverside)" = "red",
+        "London Average" = "darkgreen"
+      ),
+      breaks = c("Riverside Average", "Barking Average (excl. Riverside)", "London Average", "Individual LSOAs")
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "right",
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      axis.title = element_text(face = "bold")
+    )
+
+```
+
+```{r}
+all_averages_rmdin %>%
+  st_drop_geometry() %>% 
+  pivot_wider(names_from = group_type, values_from = avg_RMD) %>% 
+  kable()
+```
+
+
+## RMD-OUT CHURN ##
+
+```{r}
+RMD_out_long <- RMD_out %>%
+  pivot_longer(
+    cols = starts_with("x"),
+    names_to = "year",
+    values_to = "RMD"
+  ) %>%
+  mutate(year = as.integer(sub("x", "", year)),
+         in_riverside = lsoa %in% riverside_list)
+
+RMD_riverside <- RMD_out_long %>% filter(in_riverside)
+```
+
+```{r}
+riverside_avg <- RMD_out_long %>%
+  filter(in_riverside) %>%
+  group_by(year) %>%
+  summarise(avg_RMD = mean(RMD, na.rm = TRUE), .groups = "drop") %>%
+  mutate(group_type = "Riverside Average")
+
+barking_avg_excl <- RMD_out_long %>%
+  filter(lsoa %in% barking_borough_excl$LSOA11CD) %>%
+  group_by(year) %>%
+  summarise(avg_RMD = mean(RMD, na.rm = TRUE), .groups = "drop") %>%
+  mutate(group_type = "Barking Average (excl. Riverside)")
+
+london_avg <- RMD_out_long %>%
+  group_by(year) %>%
+  summarise(avg_RMD = mean(RMD, na.rm = TRUE), .groups = "drop") %>%
+  mutate(group_type = "London Average")
+
+all_averages_rmdout <- bind_rows(riverside_avg, barking_avg_excl, london_avg)
+```
+
+```{r}
+ggplot() +
+    geom_line(
+      data = RMD_out_long %>% filter(in_riverside),
+      aes(x = year, y = RMD, group = lsoa, color = "Individual LSOAs"),
+      size = 0.5, alpha = 0.3
+    ) +
+    # bold aggregates
+    geom_line(
+      data = all_averages_rmdout,
+      aes(x = year, y = avg_RMD, color = group_type),
+      size = 1.2
+    ) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    labs(
+      title = "RMD (OUT): Moves Out of LSOA",
+      x = "Year",
+      y = "RMD-OUT (mean deprivation difference)",
+      color = ""
+    ) +
+    scale_color_manual(
+      values = c(
+        "Individual LSOAs" = "grey50",
+        "Riverside Average" = "blue",
+        "Barking Average (excl. Riverside)" = "red",
+        "London Average" = "darkgreen"
+      ),
+      breaks = c("Riverside Average", "Barking Average (excl. Riverside)", "London Average", "Individual LSOAs")
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "right",
+      plot.title = element_text(hjust = 0.5, face = "bold"),
+      axis.title = element_text(face = "bold")
+    )
+
+```
+
+```{r}
+all_averages_rmdout %>%
+  st_drop_geometry() %>% 
+  pivot_wider(names_from = group_type, values_from = avg_RMD) %>% 
+  kable()
+```
+
+
+
+## IMD over time vs benchmarks
+
+```{r}
+
+imd_riverside <- imd_london_long %>%
+  filter(ls11cd %in% riverside_list) %>%
+  mutate(year = as.numeric(year))
+
+riverside_average_imd <- imd_riverside %>%
+  group_by(year) %>%
+  summarise(avg_imd_rank = mean(imd_rank, na.rm = TRUE), .groups = "drop") %>%
+  mutate(group_type = "Riverside Average")
+
+barking_average_imd <- imd_london_long %>%
+  filter(str_detect(la19nm, "^Barking"), !ls11cd %in% riverside_list) %>%
+  group_by(year) %>%
+  summarise(avg_imd_rank = mean(imd_rank, na.rm = TRUE), .groups = "drop") %>%
+  mutate(group_type = "Barking & Dagenham Avg (excl. Riverside)")
+
+london_average_imd <- imd_london_long %>%
+  group_by(year) %>%
+  summarise(avg_imd_rank = mean(imd_rank, na.rm = TRUE), .groups = "drop") %>%
+  mutate(group_type = "London Average")
+
+all_averages_imd <- bind_rows(
+  riverside_average_imd,
+  barking_average_imd,
+  london_average_imd
+)
+```
+
+```{r}
+ggplot() +
+  geom_line(
+    data = imd_riverside,
+    aes(x = year, y = imd_rank, group = ls11cd, color = "Individual Riverside LSOAs"),
+    alpha = 0.25, linewidth = 0.6
+  ) +
+  geom_point(
+    data = imd_riverside,
+    aes(x = year, y = imd_rank, color = "Individual Riverside LSOAs"),
+    alpha = 0.4, size = 1.8
+  ) +
+  geom_point(
+    data = all_averages_imd,
+    aes(x = year, y = avg_imd_rank, color = group_type),
+    size = 3
+  ) +
+  geom_line(
+    data = all_averages_imd,
+    aes(x = year, y = avg_imd_rank, color = group_type, group = group_type),
+    linewidth = 1
+  ) +
+  scale_x_continuous(
+    breaks = c(2010, 2015, 2019),
+    minor_breaks = NULL,
+    expand = expansion(add = 0.5)
+  ) +
+  labs(
+    title = "IMD Rank over Time (Riverside vs Benchmarks)",
+    x = "Year",
+    y = "IMD Rank (1 = most deprived)",
+    color = NULL
+  ) +
+  scale_color_manual(
+    values = c(
+      "Individual Riverside LSOAs" = "grey60",
+      "Riverside Average" = "blue",
+      "Barking & Dagenham Avg (excl. Riverside)" = "red",
+      "London Average" = "darkgreen"
+    ),
+    breaks = c(
+      "Riverside Average",
+      "Barking & Dagenham Avg (excl. Riverside)",
+      "London Average",
+      "Individual Riverside LSOAs"
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title = element_text(face = "bold")
+  )
+```
+
