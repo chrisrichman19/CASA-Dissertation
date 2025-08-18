@@ -24,7 +24,7 @@ Converting to %
 ### Age
 
 ```{r}
-age2021 <- read_csv("censusdata/age2021.csv") %>%
+age2021 <- read_csv("data/age2021.csv") %>%
   clean_names() %>%
   mutate(lsoa_code, all_usual_residents,
          aged_0_to_14 = aged_4_and_under + aged_5_to_9 + 
@@ -46,7 +46,7 @@ age2021 <- read_csv("censusdata/age2021.csv") %>%
 ```
 
 ```{r}
-age2011 <- read_csv("censusdata/age2011.csv") %>%
+age2011 <- read_csv("data/age2011.csv") %>%
   clean_names() %>%
   mutate(lsoa_code, all_usual_residents,
          aged_0_to_14 = aged_4_and_under + aged_5_to_9 + 
@@ -70,7 +70,7 @@ age2011 <- read_csv("censusdata/age2011.csv") %>%
 ### Economic Activity
 
 ```{r}
-ecoactivity2021 = read_csv("censusdata/ecoactivity2021.csv") %>%
+ecoactivity2021 = read_csv("data/ecoactivity2021.csv") %>%
   clean_names() %>%
   transmute(lsoa_code,
             across(
@@ -80,7 +80,7 @@ ecoactivity2021 = read_csv("censusdata/ecoactivity2021.csv") %>%
   ))
 
 
-ecoactivity2011 = read_csv("censusdata/ecoactivity2011.csv") %>%
+ecoactivity2011 = read_csv("data/ecoactivity2011.csv") %>%
   clean_names() %>%
   transmute(lsoa_code,
             across(
@@ -93,7 +93,7 @@ ecoactivity2011 = read_csv("censusdata/ecoactivity2011.csv") %>%
 ### NSSEC
 
 ```{r}
-NSSEC2021 = read_csv("censusdata/NSSEC2021.csv") %>%
+NSSEC2021 = read_csv("data/NSSEC2021.csv") %>%
   clean_names() %>%
   transmute(lsoa_code,
             across(
@@ -104,7 +104,7 @@ NSSEC2021 = read_csv("censusdata/NSSEC2021.csv") %>%
 
 
 
-NSSEC2011 = read_csv("censusdata/NSSEC2011.csv") %>%
+NSSEC2011 = read_csv("data/NSSEC2011.csv") %>%
   clean_names() %>%
   transmute(lsoa_code,
             across(
@@ -117,7 +117,7 @@ NSSEC2011 = read_csv("censusdata/NSSEC2011.csv") %>%
 ### Occupation
 
 ```{r}
-occupation2021 = read_csv("censusdata/occupation2021.csv") %>%
+occupation2021 = read_csv("data/occupation2021.csv") %>%
   clean_names() %>%
   transmute(lsoa_code,
             across(
@@ -127,7 +127,7 @@ occupation2021 = read_csv("censusdata/occupation2021.csv") %>%
   ))
 
 
-occupation2011 = read_csv("censusdata/occupation2011.csv") %>%
+occupation2011 = read_csv("data/occupation2011.csv") %>%
   clean_names() %>%
   transmute(lsoa_code,
             across(
@@ -140,7 +140,7 @@ occupation2011 = read_csv("censusdata/occupation2011.csv") %>%
 ### Qualifications
 
 ```{r}
-qualification2021 = read_csv("censusdata/qualification2021.csv") %>%
+qualification2021 = read_csv("data/qualification2021.csv") %>%
   clean_names() %>%
   transmute(lsoa_code,
             across(
@@ -152,7 +152,7 @@ qualification2021 = read_csv("censusdata/qualification2021.csv") %>%
          other_qualifications_pct = other_pct,) # renaming for clarity when merging
 
 
-qualification2011 = read_csv("censusdata/qualification2011.csv") %>%
+qualification2011 = read_csv("data/qualification2011.csv") %>%
   clean_names() %>%
   transmute(lsoa_code,
             across(
@@ -200,7 +200,7 @@ residents2021 <- reduce(census2021, full_join, by = "lsoa_code")
 ### Shapefile
 
 ```{r}
-shapefiles <- list.files("barking/LB_shp/", pattern = "\\.shp$", full.names = TRUE)
+shapefiles <- list.files("data/LB_shp/", pattern = "\\.shp$", full.names = TRUE)
 
 london2021 <- shapefiles %>%
   map(~ st_read(.x, quiet = TRUE) %>% st_transform(27700)) %>%

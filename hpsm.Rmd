@@ -12,13 +12,13 @@ library(tidyverse)
 
 - Load in postcode to LSOA lookup file in order to convert house price dataset from Postcode to LSOA aggregation.
 ```{r}
-pc <- read_csv(file="PostcodeLookup/lookup.csv") %>%
+pc <- read_csv(file="data/postcode_lookup.csv") %>%
   select(pcds,lsoa21cd,lsoa21nm)
 ```
 
 House price data  for each London Borough
 ```{r}
-path = "hpm_la_2024/"
+path = "data/hpm_la_2024/"
 
 hpm_files <- list.files(path = path, pattern = "_link_26122024\\.csv$", full.names = TRUE)
 

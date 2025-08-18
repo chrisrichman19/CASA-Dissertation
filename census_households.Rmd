@@ -16,7 +16,7 @@ library(tmaptools)
 ## Accomodation Type
 
 ```{r}
-accomtype2021 = read_csv("censusdata/accomtype2021.csv") %>%
+accomtype2021 = read_csv("data/accomtype2021.csv") %>%
   clean_names() %>%
   transmute(lsoa_code,across(
     .cols = where(is.numeric) & !all_of("all_households"),
@@ -25,7 +25,7 @@ accomtype2021 = read_csv("censusdata/accomtype2021.csv") %>%
   ))
 
 #2011
-accomtype2011 = read_csv("censusdata/accomtype2011.csv") %>%
+accomtype2011 = read_csv("data/accomtype2011.csv") %>%
   clean_names() %>%
   transmute(lsoa_code,across(
     .cols = where(is.numeric) & !all_of("all_households"),
@@ -38,7 +38,7 @@ accomtype2011 = read_csv("censusdata/accomtype2011.csv") %>%
 
 ```{r}
 #2021
-hholdcomposition2021 = read_csv("censusdata/hholdcomposition2021.csv") %>%
+hholdcomposition2021 = read_csv("data/hholdcomposition2021.csv") %>%
   clean_names() %>%
   select(-18) %>%
   transmute(lsoa_code,
@@ -49,7 +49,7 @@ hholdcomposition2021 = read_csv("censusdata/hholdcomposition2021.csv") %>%
   ))
 
 #2011
-hholdcomposition2011 = read_csv("censusdata/hholdcomposition2011.csv") %>%
+hholdcomposition2011 = read_csv("data/hholdcomposition2011.csv") %>%
   clean_names() %>%
   select(-18) %>%
   transmute(lsoa_code,
@@ -64,7 +64,7 @@ hholdcomposition2011 = read_csv("censusdata/hholdcomposition2011.csv") %>%
 
 ```{r}
 #2021
-tenure2021 = read_csv("censusdata/tenure2021.csv") %>%
+tenure2021 = read_csv("data/tenure2021.csv") %>%
   clean_names() %>%
   transmute(lsoa_code, all_households,
             across(
@@ -74,7 +74,7 @@ tenure2021 = read_csv("censusdata/tenure2021.csv") %>%
   ))
 
 #2011
-tenure2011 = read_csv("censusdata/tenure2011.csv") %>%
+tenure2011 = read_csv("data/tenure2011.csv") %>%
   clean_names() %>%
   transmute(lsoa_code, all_households,
             across(
@@ -120,9 +120,13 @@ households2021 <- reduce(census2021, full_join, by = "lsoa_code")
 ### Shapefile
 
 ```{r}
-shapefiles <- list.files("barking/LB_shp/", pattern = "\\.shp$", full.names = TRUE) 
+shapefiles <- list.files("data/LB_shp/", pattern = "\\.shp$", full.names = TRUE) 
 
-london2021 <- shapefiles %>%   map(~ st_read(.x, quiet = TRUE) %>% st_transform(27700)) %>%   bind_rows() %>%   rename(lsoa_code = lsoa21cd)
+london2021 <- shapefiles %>%   
+  map(~ st_read(.x, quiet = TRUE) %>% 
+  st_transform(27700)) %>%   
+  bind_rows() %>%   
+  rename(lsoa_code = lsoa21cd)
 ```
 
 extracting London borough column
@@ -131,7 +135,7 @@ extracting London borough column
 
 boroughs <- london2021 %>%  
   select(c(1,5)) %>%   
-  st_drop_geometry()
+  st_drop_geometry() 
 ```
 
 List of riverside lsoas

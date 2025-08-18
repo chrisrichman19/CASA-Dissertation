@@ -18,13 +18,13 @@ The Residential Mobility Index provides an estimate of the "churn" of the reside
 
 
 ```{r}
-churn <- read_csv("hh_churn_lsoa11_2023.csv")
+churn <- read_csv("data/hh_churn_lsoa11_2023.csv")
 ```
 
 #### joining by London boundaries
 
 ```{r}
-london <- st_read("barking/LSOA_2011_London_gen_MHW.shp") %>%
+london <- st_read("data/LSOA_2011/LSOA_2011_London_gen_MHW.shp") %>%
   st_transform(.,27700) 
 
 london_lsoa = london$LSOA11CD
@@ -40,12 +40,12 @@ churn_london <- london %>%
 Residential Mobility and Deprivation (RMD) data provide yearly estimates of the mean differences of residential mobility and deprivation of all known adults’ moves to, from and within each neighbourhood. Data are provided for 1997-2023 on small area estimates across the UK, comprising of Lower Layer Super Output Area for England and Wales (LSOA)
 
 ```{r}
-RMD_in <- read_csv("rmd/RMD_in_LSOA_releasedata.csv", na= c("*", "NA")) %>%
+RMD_in <- read_csv("data/RMD_in_LSOA_releasedata.csv", na= c("*", "NA")) %>%
   clean_names()
 ```
 
 ```{r}
-RMD_out <- read_csv("rmd/RMD_out_LSOA_releasedata.csv", na= c("*", "NA")) %>%
+RMD_out <- read_csv("data/RMD_out_LSOA_releasedata.csv", na= c("*", "NA")) %>%
   clean_names()
 ```
 
