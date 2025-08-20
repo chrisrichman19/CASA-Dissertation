@@ -477,6 +477,36 @@ out <- tibble(
 out %>% kable()
 ```
 
+
+```{r}
+out %>%
+  filter(str_detect(variable, "^aged")) %>%
+  write.csv("agecomp.csv", row.names = F)
+```
+
+```{r}
+out %>%
+  filter(str_detect(variable,"^economically")) %>%
+  write.csv("ecocomp.csv", row.names = F)
+```
+
+
+```{r}
+out %>%
+  filter(variable %in% colnames(qualification2021)) %>%
+  write.csv("qualification.csv", row.names = F)
+```
+
+
+```{r}
+
+out %>%
+  filter(variable %in% colnames(occupation2021)) %>%
+  write.csv("occupation.csv", row.names = F)
+
+```
+
+
 ## Maps
 
 ```{r}

@@ -1,4 +1,4 @@
----
+citi---
 title: "census_households"
 output: html_document
 date: "2025-08-16"
@@ -380,6 +380,27 @@ out %>% kable()
 ```
 
 
+```{r}
+out %>%
+  filter(variable %in% colnames(tenure2021)) %>%
+  write.csv("tenure.csv", row.names = F)
+```
+
+
+```{r}
+out %>%
+  filter(variable %in% colnames(hholdcomposition2021)) %>%
+  write.csv("hholdcomposition.csv", row.names = F)
+```
+
+
+```{r}
+out %>%
+  filter(variable %in% colnames(accomtype2021)) %>%
+  write.csv("accomtype.csv", row.names = F)
+```
+
+
 ## Maps
 
 ```{r}
@@ -392,7 +413,7 @@ map <- tm_shape(st_as_sf(households_sf)) +
     col = "owned_with_a_mortgage_or_loan_pct",
     palette = "reds",
     alpha   = 0.5,
-    title   = "Households owned with a mortage or loan (2021 %)"
+    title   = "Households owned with a mortage or loan (%)"
   ) +
   tm_borders(lwd = 0.5, col = "grey50") +
   tm_shape(target_sf) +
@@ -433,7 +454,7 @@ map <- tm_shape(st_as_sf(households_sf)) +
     col = "married_or_civil_partnership_couple_no_children_pct",
     palette = "reds",
     alpha   = 0.5,
-    title   = "Married/Civil partnership with no children (2021 households %)"
+    title   = "Married/Civil partnership with no children (%)"
   ) +
   tm_borders(lwd = 0.5, col = "grey50") +
   tm_shape(target_sf) +

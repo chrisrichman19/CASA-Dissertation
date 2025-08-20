@@ -6,6 +6,8 @@ date: "2025-08-17"
 
 ```{r}
 library(tidyverse)
+library(sf)
+library(tmap)
 ```
 
 ### House price data (per square meter)
@@ -127,4 +129,119 @@ ggplot(hpm_riverside, aes(x = year, y = priceper)) +
 ```
 
 
+### Percentage change
+
+```{r}
+riverside_avg_2008 <- riverside_average_price_per_year %>%
+  filter(year == 2008) %>%
+  select(avg_priceper) %>%
+  pull()
+
+riverside_avg_2023 <- riverside_average_price_per_year %>%
+  filter(year == 2023) %>%
+  select(avg_priceper) %>%
+  pull()
+
+
+(riverside_avg_2023 - riverside_avg_2008)/
+  riverside_avg_2008
+#68.92% increase
+
+
+  
+```
+
+```{r}
+barking_avg_2008 <- barking_average_price_per_year %>%
+  filter(year == 2008) %>%
+  select(avg_priceper) %>%
+  pull()
+
+barking_avg_2023 <- barking_average_price_per_year %>%
+  filter(year == 2024) %>%
+  select(avg_priceper) %>%
+  pull()
+
+
+(barking_avg_2023 - barking_avg_2008)/
+  barking_avg_2008
+#81.70%
+
+```
+
+
+
+```{r}
+london_avg_2008 <- london_average_price_per_year %>%
+  filter(year == 2008) %>%
+  select(avg_priceper) %>%
+  pull()
+
+london_avg_2023 <- london_average_price_per_year %>%
+  filter(year == 2023) %>%
+  select(avg_priceper) %>%
+  pull()
+
+
+(london_avg_2023 - london_avg_2008)/
+  london_avg_2008
+
+#80.9%
+```
+
+### Maps
+
+```{r}
+
+shapefiles <- list.files("data/LB_shp/", pattern = "\\.shp$", full.names = TRUE) 
+
+london2021 <- shapefiles %>%   map(~ st_read(.x, quiet = TRUE) %>% st_transform(27700)) %>%   bind_rows() %>%   rename(lsoa_code = lsoa21cd)
+
+price_2023_bd <- hpm_grouped %>%
+  filter(year == 2023 & str_detect(lsoa21nm, "^Barking and Dagenham")) %>%
+  left_join(., london2021, by = c("lsoa21cd" = "lsoa_code"))
+  
+
+price_map_sf <- london2021 %>%
+  filter(str_detect(lsoa21nm, "^Barking and Dagenham")) %>%
+  left_join(price_2023_bd, by = c("lsoa_code" = "lsoa21cd"))
+```
+
+```{r}
+
+riverside_list = list("E01034476", "E01034477",  "E01000094", "E01000095", "E01034475","E01034478", "E01000093", "E01000091")
+
+station <- st_read("data/BRE_station.gpkg")  
+
+
+riverside_sf <- london2021 %>%
+  filter(lsoa_code %in% riverside_list)
+
+
+riverside_boundary <- riverside_sf |>
+  sf::st_make_valid() |>
+  dplyr::summarise()
+```
+
+
+
+```{r}
+tm_shape(price_map_sf) +
+  tm_polygons(
+    col = "priceper",                 
+    palette = "YlOrRd",                  
+    style = "quantile", n = 7,           
+    alpha = 0.8,
+    title = "Average £/m² (2023)"
+  ) +
+  tm_borders(lwd = 0.5, col = "grey50") +
+  tm_shape(riverside_boundary) + tm_borders(lwd = 2, col = "black") +
+  tm_shape(station) +
+  tm_symbols(size = 0.6, shape = 21, col = "yellow", border.col = "black", border.lwd = 1.2) +
+  tm_layout(
+    legend.outside = TRUE,
+    frame = FALSE
+  )
+
+```
 
