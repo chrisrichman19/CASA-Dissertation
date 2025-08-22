@@ -510,7 +510,7 @@ out %>%
 ## Maps
 
 ```{r}
-station <- st_read("data/BRE_station.gpkg")  
+station <- st_read("data/BRE_station.gpkg") 
 ```
 
 ```{r}
