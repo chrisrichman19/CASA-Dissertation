@@ -39,6 +39,10 @@ churn_london <- london %>%
 
 Residential Mobility and Deprivation (RMD) data provide yearly estimates of the mean differences of residential mobility and deprivation of all known adults’ moves to, from and within each neighbourhood. Data are provided for 1997-2023 on small area estimates across the UK, comprising of Lower Layer Super Output Area for England and Wales (LSOA)
 
+License needed so it is not on the github:
+
+https://data.geods.ac.uk/dataset/residential-mobility-and-deprivation-rmd-index-lsoa-geography
+
 ```{r}
 RMD_in <- read_csv("data/RMD_in_LSOA_releasedata.csv", na= c("*", "NA")) %>%
   clean_names()
